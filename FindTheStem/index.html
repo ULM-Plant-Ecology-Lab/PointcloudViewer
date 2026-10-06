@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Find the Stem</title>
+<meta name="description" content="Find three tree trunks in a drone LiDAR point cloud and measure their diameter at breast height. Russell Sage WMA, Louisiana.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>img{max-width:100%}</style>
+</head>
+<body>
+<style>
+/* Layout: one column, a square canvas with a step panel beside it on wide screens */
+:root{--bg:#F9E0B9;--panel:#FBF2E9;--ink:#0F4C49;--muted:#4A6E69;--teal:#00635E;--amber:#EFB251;--cloud:#0E1217;--orange:#FF8C3C;--cyan:#5AE1FF;color-scheme:light}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',Arial,sans-serif;font-size:17px;line-height:1.45;padding-block:24px;padding-inline:16px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-family:Poppins,Arial,sans-serif;font-size:clamp(28px,4vw,42px);font-weight:700;line-height:1.1;margin:0;color:var(--teal);text-wrap:balance}
+h2{font-family:Poppins,Arial,sans-serif;font-size:22px;font-weight:600;margin:0;color:var(--teal)}
+p{margin:0}
+.lead{color:var(--muted);max-width:62ch}
+.top{display:flex;flex-direction:column;gap:8px}
+.trees{display:flex;flex-wrap:wrap;gap:12px}
+.tree{flex:1 1 180px;min-width:0;background:var(--panel);border:3px solid transparent;border-radius:14px;padding:14px 16px;cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.tree:hover{border-color:var(--amber)}
+.tree.active{border-color:var(--teal)}
+.tree .n{font-family:Poppins,Arial,sans-serif;font-weight:600;font-size:18px}
+.tree .s{color:var(--muted);font-size:15px}
+.tree .d{font-family:Poppins,Arial,sans-serif;font-weight:700;font-size:16px;color:var(--teal);margin-top:4px;min-height:1.4em}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,380px);gap:20px;align-items:start}
+@media (max-width:820px){.stage{grid-template-columns:1fr}}
+.cv{position:relative;width:100%;max-width:720px;aspect-ratio:1/1;background:var(--cloud);border-radius:10px;border:4px solid var(--ink);overflow:hidden;touch-action:none;box-shadow:0 12px 32px rgba(0,0,0,.25)}
+.cv canvas{display:block;width:100%;height:100%}
+.tag{position:absolute;left:12px;top:10px;background:rgba(14,18,23,.7);color:#F9E0B9;font-size:13px;letter-spacing:1px;text-transform:uppercase;padding:4px 8px;border-radius:6px}
+.scale{position:absolute;right:12px;bottom:10px;color:#F9E0B9;font-size:13px;display:flex;align-items:center;gap:6px}
+.scale i{display:block;height:3px;background:#F9E0B9}
+.panel{background:var(--panel);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.step{display:flex;gap:10px;align-items:baseline}
+.step b{font-family:Poppins,Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--amber);background:var(--teal);padding:3px 10px;border-radius:12px}
+.msg{min-height:3.2em}
+.ok{color:var(--teal);font-weight:600}
+.warn{color:#B4532A;font-weight:600}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button.b{font:inherit;font-weight:600;padding:9px 14px;border-radius:10px;border:2px solid var(--teal);background:var(--teal);color:#F9E0B9;cursor:pointer}
+button.b.alt{background:transparent;color:var(--teal)}
+button.b:disabled{opacity:.4;cursor:default}
+button:focus-visible,.tree:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.big{font-family:Poppins,Arial,sans-serif;font-size:40px;font-weight:700;color:var(--teal);line-height:1.1;font-variant-numeric:tabular-nums}
+.small{font-size:14px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(15,76,73,.18)}
+th{font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.foot{color:var(--muted);font-size:14px;max-width:70ch}
+@media (prefers-reduced-motion:no-preference){.tree,button.b{transition:border-color .15s,opacity .15s}}
+</style>
+<div class="wrap">
+  <div class="top">
+    <h1>Find the stem, measure the trunk</h1>
+    <p class="lead">Three real trees from a drone LiDAR cloud at Russell Sage WMA. Find each trunk in the understory slab, then measure its diameter at breast height the way the thesis did. The tape measurement is hidden until you commit.</p>
+  </div>
+  <div class="trees" id="trees"></div>
+  <div class="stage">
+    <div class="cv" id="cvbox">
+      <canvas id="cv" width="1000" height="1000"></canvas>
+      <div class="tag" id="tag">Slab, 0 to 3 m above ground, seen from above</div>
+      <div class="scale"><i id="scalebar" style="width:60px"></i><span id="scaletxt">2 m</span></div>
+    </div>
+    <div class="panel">
+      <div class="step"><b id="stepno">Step 1</b><h2 id="steph">Find the stem</h2></div>
+      <p id="prompt">Pick a tree to start.</p>
+      <p class="msg" id="msg"></p>
+      <div class="btns" id="btns"></div>
+      <div id="result"></div>
+    </div>
+  </div>
+  <div id="summary"></div>
+  <p class="foot">How the thesis did it: a 0 to 3 m slab under each crown is drawn from above, the stem is marked, a 15 cm slice is cut at 1.37 m, and a circle is fitted to the ring of bark returns. On 122 clear trunks the fitted diameter landed about 2.5 cm from the tape on average.</p>
+</div>
+<script>
+const TREES=[
+ {id:'t1',file:'tree1',name:'Tree 1',sp:'Nuttall oak',tape:80.9,ring:82.2,height:24.4},
+ {id:'t2',file:'tree2',name:'Tree 2',sp:'Water hickory',tape:58.4,ring:58.1,height:22.5},
+ {id:'t3',file:'tree3',name:'Tree 3',sp:'Willow oak',tape:48.3,ring:51.3,height:20.1}
+];
+const S=1000, cv=document.getElementById('cv'), g=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+let cur=null, step=1, half=9, picks=[], misses=0, center=[0,0], fit=null, data={}, results={};
+function parseB64(txt){const bin=atob(txt.trim());const u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);const q=new Int16Array(u8.buffer);const n=Math.floor(q.length/3);const xyz=new Float32Array(n*3);for(let i=0;i<n*3;i++)xyz[i]=q[i]/1000;return {n,xyz};}
+async function load(t){ if(data[t.id]) return data[t.id]; const [a,b]=await Promise.all([fetch(t.file+'_slab.txt').then(r=>r.text()),fetch(t.file+'_bh.txt').then(r=>r.text())]); data[t.id]={slab:parseB64(a),bh:parseB64(b)}; return data[t.id]; }
+function hcol(t){ t=Math.max(0,Math.min(1,t)); return [255*Math.min(1,Math.max(0,1.6*t-0.2)), 255*Math.min(1,Math.max(0,0.25+0.9*Math.sin(Math.PI*t))), 255*Math.min(1,Math.max(0,1.1-1.4*t))]; }
+function drawPoints(pts,cx,cy,hf,mode){ // mode 'slab' (height color) or 'ring' (cyan)
+  const img=g.createImageData(S,S); const d=img.data; for(let i=0;i<S*S;i++){d[i*4]=14;d[i*4+1]=18;d[i*4+2]=23;d[i*4+3]=255;}
+  const sc=S/(2*hf); const n=pts.n, xyz=pts.xyz; const k=mode==='ring'?5:2;
+  const order=[]; for(let i=0;i<n;i++) order.push(i); if(mode==='slab') order.sort((a,b)=>xyz[a*3+2]-xyz[b*3+2]);
+  for(const i of order){ const x=xyz[i*3],y=xyz[i*3+1],z=xyz[i*3+2]; const u=Math.floor((x-cx+hf)*sc), v=Math.floor((hf-(y-cy))*sc); if(u<0||v<0||u>=S-k||v>=S-k) continue;
+    let c; if(mode==='slab'){c=hcol((z-0.15)/2.85);} else {c=[90,225,255];}
+    for(let du=0;du<k;du++) for(let dv=0;dv<k;dv++){const p=((v+dv)*S+(u+du))*4; d[p]=c[0];d[p+1]=c[1];d[p+2]=c[2];}
+  }
+  g.putImageData(img,0,0);
+}
+function toModel(ev){ const r=cv.getBoundingClientRect(); const px=(ev.clientX-r.left)/r.width*S, py=(ev.clientY-r.top)/r.height*S; const sc=S/(2*half); return [center[0]+px/sc-half, center[1]+half-py/sc]; }
+function toPx(x,y){ const sc=S/(2*half); return [(x-center[0]+half)*sc, (half-(y-center[1]))*sc]; }
+function setScale(){ const sc=S/(2*half); const m=half>3?2:0.5; const px=m*sc*(cv.getBoundingClientRect().width/S); $('scalebar').style.width=px+'px'; $('scaletxt').textContent=m>=1?m+' m':(m*100)+' cm'; }
+function renderTrees(){ $('trees').innerHTML=TREES.map(t=>`<button class="tree${cur&&cur.id===t.id?' active':''}" id="btn_${t.id}" data-id="${t.id}"><div class="n">${t.name}: ${t.sp}</div><div class="s">${t.height.toFixed(0)} m tall</div><div class="d">${results[t.id]?('Yours '+results[t.id].mine.toFixed(0)+' cm, tape '+t.tape.toFixed(0)+' cm'):''}</div></button>`).join('');
+  for(const b of document.querySelectorAll('.tree')) b.addEventListener('click',()=>start(TREES.find(t=>t.id===b.dataset.id))); }
+function buttons(list){ $('btns').innerHTML=''; for(const [label,fn,alt,dis] of list){ const b=document.createElement('button'); b.className='b'+(alt?' alt':''); b.textContent=label; b.disabled=!!dis; b.addEventListener('click',fn); $('btns').appendChild(b);} }
+async function start(t){ cur=t; step=1; half=9; picks=[]; misses=0; center=[0,0]; fit=null; renderTrees(); $('result').innerHTML=''; $('msg').textContent='Loading points...'; $('msg').className='msg';
+  $('stepno').textContent='Step 1'; $('steph').textContent='Find the stem'; $('tag').textContent='Slab, 0 to 3 m above ground, seen from above';
+  $('prompt').textContent='This is everything between 0 and 3 m above the ground, looked at from straight above, colored by height (blue low, red high). The trunk shows up as a tight ring. Click it.';
+  buttons([['Zoom in',()=>{half=half>5?4.5:9; redraw();},true]]);
+  const d=await load(t); $('msg').textContent=''; redraw(d); }
+function redraw(d){ d=d||data[cur.id]; if(!d) return; if(step===1){ drawPoints(d.slab,center[0],center[1],half,'slab'); if(misses>=3){ const [px,py]=toPx(0,0); const r=0.9*S/(2*half); g.strokeStyle='#FF8C3C'; g.lineWidth=6; g.beginPath(); g.arc(px,py,r,0,Math.PI*2); g.stroke(); } }
+  else { drawPoints(d.bh,center[0],center[1],half,'ring'); for(const [x,y] of picks){ const [px,py]=toPx(x,y); g.fillStyle='#FF8C3C'; g.beginPath(); g.arc(px,py,9,0,Math.PI*2); g.fill(); }
+    if(fit){ const [px,py]=toPx(fit.cx,fit.cy); const r=fit.r*S/(2*half); g.strokeStyle='#FF8C3C'; g.lineWidth=6; g.beginPath(); g.arc(px,py,r,0,Math.PI*2); g.stroke(); } }
+  setScale(); }
+function fitCircle(P){ // Kasa fit: x^2+y^2+Dx+Ey+F=0
+  let sxx=0,sxy=0,syy=0,sx=0,sy=0,n=P.length,sr=0,sxr=0,syr=0; for(const [x,y] of P){const r=x*x+y*y; sxx+=x*x;sxy+=x*y;syy+=y*y;sx+=x;sy+=y;sr+=r;sxr+=x*r;syr+=y*r;}
+  const A=[[sxx,sxy,sx],[sxy,syy,sy],[sx,sy,n]], b=[-sxr,-syr,-sr];
+  // solve 3x3
+  const m=A.map((row,i)=>[...row,b[i]]); for(let i=0;i<3;i++){ let p=i; for(let r=i+1;r<3;r++) if(Math.abs(m[r][i])>Math.abs(m[p][i])) p=r; [m[i],m[p]]=[m[p],m[i]]; if(Math.abs(m[i][i])<1e-12) return null; for(let r=0;r<3;r++){ if(r===i) continue; const f=m[r][i]/m[i][i]; for(let c=i;c<4;c++) m[r][c]-=f*m[i][c]; } }
+  const D=m[0][3]/m[0][0], E=m[1][3]/m[1][1], F=m[2][3]/m[2][2]; const cx=-D/2, cy=-E/2, r=Math.sqrt(Math.max(0,cx*cx+cy*cy-F)); return {cx,cy,r}; }
+cv.addEventListener('pointerdown',ev=>{ if(!cur||!data[cur.id]) return; ev.preventDefault(); const [x,y]=toModel(ev);
+  if(step===1){ const dist=Math.hypot(x,y); if(dist<0.8){ $('msg').textContent='That is the trunk. Now cut the slice at breast height.'; $('msg').className='msg ok'; buttons([['Cut the slice at 1.37 m',goStep2]]); }
+    else { misses++; $('msg').textContent= misses>=3 ? 'No trunk there. The real one is now ringed in orange; click inside it.' : 'No trunk there. That is a shrub or a low branch. Look for a small, tight ring of points and try again.'; $('msg').className='msg warn'; redraw(); } }
+  else if(step===2){ picks.push([x,y]); fit=null; redraw(); if(picks.length>=3){ buttons([['Fit circle',doFit],['Clear points',()=>{picks=[];fit=null;redraw();buttons([['Clear points',()=>{picks=[];fit=null;redraw();},true]]);},true]]); } $('msg').textContent=picks.length+' point'+(picks.length===1?'':'s')+' marked'+(picks.length<3?' (need at least 3)':''); $('msg').className='msg'; }
+});
+function goStep2(){ step=2; half=1.0; center=[0,0]; picks=[]; fit=null; $('stepno').textContent='Step 2'; $('steph').textContent='Measure the ring'; $('tag').textContent='Slice at 1.37 m, 15 cm thick, seen from above';
+  $('prompt').textContent='This is a 15 cm thick slice through the cloud at breast height. The bark returns form a ring. Click 4 or more points around the ring, then fit a circle.'; $('msg').textContent=''; $('msg').className='msg';
+  buttons([['Clear points',()=>{picks=[];fit=null;redraw();},true]]); redraw(); }
+function doFit(){ fit=fitCircle(picks); if(!fit||!(fit.r>0.05&&fit.r<1.5)){ $('msg').textContent='Those points do not make a sensible circle. Clear and try again.'; $('msg').className='msg warn'; fit=null; redraw(); return; }
+  redraw(); const mine=fit.r*200; $('msg').textContent=''; $('result').innerHTML=`<div class="big">${mine.toFixed(0)} cm</div><div class="small">your diameter at breast height</div>`;
+  buttons([['Reveal the tape',()=>reveal(mine)],['Clear points',()=>{picks=[];fit=null;$('result').innerHTML='';redraw();buttons([['Clear points',()=>{picks=[];fit=null;redraw();},true]]);},true]]); }
+function reveal(mine){ results[cur.id]={mine}; const diff=mine-cur.tape; $('result').innerHTML=`<div class="big">${mine.toFixed(0)} cm <span style="font-size:22px;color:#4A6E69">yours</span></div><div class="big">${cur.tape.toFixed(0)} cm <span style="font-size:22px;color:#4A6E69">tape</span></div><div class="small">You are ${Math.abs(diff).toFixed(1)} cm ${diff>=0?'over':'under'}. The thesis ring fit on this tree gave ${cur.ring.toFixed(0)} cm.</div>`;
+  renderTrees(); const next=TREES.find(t=>!results[t.id]); buttons(next?[[ 'Next tree: '+next.name,()=>start(next)]]:[['Start over',()=>{results={};$('summary').innerHTML='';start(TREES[0]);},true]]); summary(); }
+function summary(){ const done=TREES.filter(t=>results[t.id]); if(done.length<TREES.length) return; const mae=done.reduce((s,t)=>s+Math.abs(results[t.id].mine-t.tape),0)/done.length;
+  $('summary').innerHTML=`<div class="panel"><h2>All three trees</h2><table><tr><th>Tree</th><th>Species</th><th>Yours</th><th>Tape</th><th>Miss</th></tr>${done.map(t=>`<tr><td>${t.name}</td><td>${t.sp}</td><td>${results[t.id].mine.toFixed(0)} cm</td><td>${t.tape.toFixed(0)} cm</td><td>${(results[t.id].mine-t.tape).toFixed(1)} cm</td></tr>`).join('')}</table><p>Your average miss: <b>${mae.toFixed(1)} cm</b>. The thesis averaged 2.5 cm over 122 clear trunks. Trunks hidden by palmetto and vines never show a ring at all, which is why about one tree in three got no diameter from the air.</p></div>`; }
+renderTrees(); drawPoints({n:0,xyz:new Float32Array(0)},0,0,9,'slab'); setScale();
+window.addEventListener('resize',setScale);
+</script>
+
+</body>
+</html>
